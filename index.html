@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Controle de Caixas</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; background:#f6f8fb; }
+    .card { background: #fff; padding: 20px; border-radius: 8px; max-width:760px; margin: 0 auto; box-shadow:0 6px 18px rgba(0,0,0,0.06); }
+    h1 { text-align:center; margin-bottom:18px; }
+    label { display:block; margin:8px 0 6px; font-weight:600; }
+    select, input[type="number"], input[type="text"] { width:100%; padding:10px; font-size:16px; border:1px solid #ccc; border-radius:6px; box-sizing:border-box; }
+    button.primary { background:#1f6feb; color:#fff; border:none; padding:25px 35px; border-radius:8px; cursor:pointer; font-weight:600; }
+    button.primary:disabled { opacity:0.6; cursor:default; }
+    .row { display:flex; gap:12px; }
+    .col { flex:1; }
+    .hidden { display:none; }
+
+    /* botões fixos */
+    #btnFinalizarFixed {
+      position: fixed;
+      right: 16px;
+      top: 40%;
+      transform: translateY(-50%);
+      z-index: 9999;
+      background:#ff6b6b;
+      color:#fff;
+      border:none;
+      padding:30px 40px;
+      border-radius:8px;
+      box-shadow:0 6px 18px rgba(0,0,0,0.12);
+      cursor:pointer;
+      font-weight:700;
+    }
+    #btnInicioFixed {
+      position: fixed;
+      right: 16px;
+      bottom: 18px;
+      z-index: 9999;
+      background:#20b04b;
+      color:#fff;
+      border:none;
+      padding:30px 40px;
+      border-radius:8px;
+      box-shadow:0 6px 18px rgba(0,0,0,0.12);
+      cursor:pointer;
+      font-weight:700;
+    }
+
+    /* overlays/modal forms */
+    .overlay {
+      display:none;
+      position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:10000;
+      align-items:center; justify-content:center;
+    }
+    .overlay .box {
+      background:#fff; padding:18px; border-radius:10px; width:90%; max-width:420px;
+      box-shadow:0 12px 30px rgba(0,0,0,0.2);
+    }
+    .overlay .actions { margin-top:12px; display:flex; gap:8px; justify-content:flex-end; }
+    .small { font-size:13px; color:#666; margin-top:6px; }
+
+    @media (max-width:600px) {
+      #btnFinalizarFixed, #btnInicioFixed { right:10px; padding:10px 12px; font-size:14px; }
+      .row { flex-direction:column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Controle de Caixas — Sítio Nova Vinhedo</h1>
+
+    <form id="meuForm">
+      <label>Motorista</label>
+      <select id="motorista" required>
+        <option value="">-- escolha --</option>
+        <option>HILTON</option>
+        <option>MARCIO</option>
+        <option>PAULO</option>
+      </select>
+
+      <label>Cliente</label>
+      <select id="cliente" required>
+        <option value="">-- escolha --</option>
+        <option>AMO PASTEL</option><option>SAL DA TERRA</option><option>BARNABÉ</option>
+        <option>BOTECO</option><option>C. ESFIHA 01</option><option>C. ESFIHA 01 CENTRO</option>
+        <option>C. ESFIHA 01 INDUSTRIAL</option><option>C. ESFIHA 02</option><option>CATO L1</option>
+        <option>CATO L2</option><option>COSTELA DE ADÃO</option><option>GALERIA</option>
+        <option>GIANINI 1</option><option>GIANINI 02 MORADA DO SOL</option><option>GIANINI COPA</option>
+        <option>KOSTELA</option><option>LA BELLA</option><option>MACEDO</option><option>MANJERICÃO</option>
+        <option>MANJERICÃO GARDEN</option><option>MARLI</option><option>M&M PREMIUM L2</option>
+        <option>NUTRIQUALI</option><option>ORIENTAL</option><option>PANORAMA</option>
+        <option>S. DA ROÇA</option><option>S. DA TERRA</option><option>S. RITA</option>
+        <option>SUMERBOL 01</option><option>SUMERBOL 02</option><option>SUMERBOL 03</option><option>TINHOS</option>
+      </select>
+
+      <div class="row" style="margin-top:10px">
+        <div class="col">
+          <label>Caixas entregues</label>
+          <input type="number" id="saida" min="0" placeholder="ex: 5" required>
+        </div>
+        <div class="col">
+          <label>Caixas recebidas</label>
+          <input type="number" id="entrada" min="0" placeholder="ex: 2" required>
+        </div>
+      </div>
+
+      <div style="margin-top:12px; text-align:right;">
+        <button type="submit" class="primary" id="btnEnviar">Enviar</button>
+      </div>
+    </form>
+
+    <p class="small">Observação: os botões <strong>Início</strong> e <strong>Finalizar</strong> (à direita) devem ser usados no começo e final da entrega <strong>sempre</strong> que iniciar ou terminar as entregas.</p>
+  </div>
+
+  <!-- BOTÕES FIXOS -->
+  <button id="btnFinalizarFixed" title="Finalizar ciclo">FINALIZAR</button>
+  <button id="btnInicioFixed" title="Início do ciclo">INÍCIO</button>
+
+  <!-- MODAL INFORMAÇÃO -->
+  <div id="msgOverlay" class="overlay" style="display:none; align-items:center;">
+    <div class="box">
+      <div id="msgText">Mensagem</div>
+      <div class="actions" style="margin-top:12px;">
+        <button id="msgClose" class="primary">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL INÍCIO -->
+  <div id="inicioOverlay" class="overlay">
+    <div class="box">
+      <h3>Início da entrega</h3>
+      <label>Motorista</label>
+      <select id="inicioMotorista">
+        <option value="">-- escolha --</option>
+        <option>HILTON</option><option>MARCIO</option><option>PAULO</option>
+      </select>
+      <label>Caixas no caminhão (início)</label>
+      <input type="number" id="inicioCaixas" min="0" placeholder="ex: 120">
+
+      <div class="actions">
+        <button id="inicioCancel">Cancelar</button>
+        <button id="inicioSave" class="primary">Registrar Início</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL FINALIZAR -->
+  <div id="finalizarOverlay" class="overlay">
+    <div class="box">
+      <h3>Finalizar entrega</h3>
+      <label>Motorista</label>
+      <select id="finalMotorista">
+        <option value="">-- escolha --</option>
+        <option>HILTON</option><option>MARCIO</option><option>PAULO</option>
+      </select>
+
+      <label>Caixas restantes no caminhão (final)</label>
+      <input type="number" id="finalCaixas" min="0" placeholder="ex: 10">
+
+      <div class="actions">
+        <button id="finalCancel">Cancelar</button>
+        <button id="finalSave" class="primary">Registrar Final</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ===== Função utilitária de cooldown =====
+    function aplicarCooldown(botao, segundos) {
+      botao.disabled = true;
+      let tempoRestante = segundos;
+      const textoOriginal = botao.textContent;
+      const intervalo = setInterval(() => {
+        tempoRestante--;
+        if (tempoRestante <= 0) {
+          clearInterval(intervalo);
+          botao.disabled = false;
+        }
+      }, 1000);
+    }
+
+    // elementos
+    const form = document.getElementById('meuForm');
+    const motorista = document.getElementById('motorista');
+    const cliente = document.getElementById('cliente');
+    const saida = document.getElementById('saida');
+    const entrada = document.getElementById('entrada');
+    const btnEnviar = document.getElementById('btnEnviar');
+
+    const btnFinalizarFixed = document.getElementById('btnFinalizarFixed');
+    const btnInicioFixed = document.getElementById('btnInicioFixed');
+
+    const msgOverlay = document.getElementById('msgOverlay');
+    const msgText = document.getElementById('msgText');
+    const msgClose = document.getElementById('msgClose');
+
+    const inicioOverlay = document.getElementById('inicioOverlay');
+    const inicioMotorista = document.getElementById('inicioMotorista');
+    const inicioCaixas = document.getElementById('inicioCaixas');
+    const inicioCancel = document.getElementById('inicioCancel');
+    const inicioSave = document.getElementById('inicioSave');
+
+    const finalizarOverlay = document.getElementById('finalizarOverlay');
+    const finalMotorista = document.getElementById('finalMotorista');
+    const finalCaixas = document.getElementById('finalCaixas');
+    const finalCancel = document.getElementById('finalCancel');
+    const finalSave = document.getElementById('finalSave');
+
+    // helpers abrir/fechar overlays
+    function showMsg(text) { msgText.innerHTML = text; msgOverlay.style.display = 'flex'; }
+    function hideMsg(){ msgOverlay.style.display = 'none'; }
+
+    function openInicio(){ inicioOverlay.style.display = 'flex'; }
+    function closeInicio(){ inicioOverlay.style.display = 'none'; inicioMotorista.value=''; inicioCaixas.value=''; }
+
+    function openFinalizar(){ finalizarOverlay.style.display = 'flex'; }
+    function closeFinalizar(){ finalizarOverlay.style.display = 'none'; finalMotorista.value=''; finalCaixas.value=''; }
+
+    msgClose.onclick = () => { hideMsg(); aplicarCooldown(msgClose,10); };
+
+    window.onclick = function(e){
+      if (e.target === msgOverlay) hideMsg();
+      if (e.target === inicioOverlay) closeInicio();
+      if (e.target === finalizarOverlay) closeFinalizar();
+    };
+
+    // ===== ENVIO PRINCIPAL =====
+    form.addEventListener('submit', function(ev){
+      ev.preventDefault();
+      aplicarCooldown(btnEnviar,10);
+
+      const m = motorista.value.trim();
+      const c = cliente.value.trim();
+      const s = saida.value;
+      const eVal = entrada.value;
+      if (!m || !c || s === "" || eVal === "") { showMsg('Preencha todos os campos.'); return; }
+
+      google.script.run.withSuccessHandler(function(res){
+        showMsg(res || 'Enviado com sucesso!');
+        form.reset();
+      }).withFailureHandler(function(err){
+        showMsg('Erro ao enviar os dados.');
+        console.error(err);
+      }).doPostWrapper(m, c, s, eVal);
+    });
+
+    // ===== INÍCIO =====
+    btnInicioFixed.addEventListener('click', function(){
+      openInicio();
+    });
+    inicioCancel.addEventListener('click', closeInicio);
+
+    inicioSave.addEventListener('click', function(){
+      aplicarCooldown(inicioSave,10);
+      const m = inicioMotorista.value.trim();
+      const caixas = inicioCaixas.value;
+      if (!m || caixas === "") { alert('Informe motorista e caixas no início.'); return; }
+
+      google.script.run.withSuccessHandler(function(res){
+        closeInicio();
+        showMsg(res || 'Início registrado!');
+      }).withFailureHandler(function(err){
+        showMsg('Erro ao registrar início.');
+        console.error(err);
+      }).registrarInicioCiclo(m, caixas);
+    });
+
+    // ===== FINALIZAR =====
+    btnFinalizarFixed.addEventListener('click', function(){
+      openFinalizar();
+    });
+    finalCancel.addEventListener('click', closeFinalizar);
+
+    finalSave.addEventListener('click', function(){
+      aplicarCooldown(finalSave,10);
+      const m = finalMotorista.value.trim();
+      const caixas = finalCaixas.value;
+      if (!m || caixas === "") { alert('Informe motorista e caixas no final.'); return; }
+
+      google.script.run.withSuccessHandler(function(res){
+        closeFinalizar();
+        showMsg(res || 'Ciclo finalizado!');
+      }).withFailureHandler(function(err){
+        showMsg('Erro ao finalizar ciclo. Verifique se existe um início aberto para o motorista.');
+        console.error(err);
+      }).finalizarCiclo(m, caixas);
+    });
+  </script>
+</body>
+</html>
