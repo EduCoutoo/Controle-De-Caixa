@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Controle de Caixas</title>
   <style>
     body { font-family: Arial, sans-serif; padding: 20px; background:#f6f8fb; }
@@ -61,8 +61,31 @@
     .small { font-size:13px; color:#666; margin-top:6px; }
 
     @media (max-width:600px) {
-      #btnFinalizarFixed, #btnInicioFixed { right:10px; padding:10px 12px; font-size:14px; }
+      #btnFinalizarFixed, #btnInicioFixed { 
+        right: 10px; 
+        padding: 14px 16px; 
+        font-size: 14px; 
+        width: auto;
+        height: auto;
+      }
       .row { flex-direction:column; }
+      button.primary { padding: 16px; font-size: 16px; }
+    }
+
+    /* Toast de feedback (móvel-friendly) */
+    #toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #333;
+      color: white;
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-weight: bold;
+      z-index: 20000;
+      display: none;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
     }
   </style>
 </head>
@@ -166,22 +189,61 @@
     </div>
   </div>
 
+  <!-- Toast -->
+  <div id="toast"></div>
+
   <script>
-    // ===== Função utilitária de cooldown =====
-    function aplicarCooldown(botao, segundos) {
+  
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwMy7zBmol3-ny5VRCq6Dt2z6Ty-ZGjAHDnnUgTwr3KUrIu3ubd_QzVYz-iis7ut26tZA/exec";
+
+    // Função para mostrar toast (melhor que alert no celular)
+    function showToast(msg, sucesso = true) {
+      const toast = document.getElementById("toast");
+      toast.textContent = msg;
+      toast.style.backgroundColor = sucesso ? "#20b04b" : "#ff6b6b";
+      toast.style.display = "block";
+      setTimeout(() => toast.style.display = "none", 3000);
+    }
+
+    // Cooldown (mantém sua lógica, mas sem setInterval global)
+    function aplicarCooldown(botao, segundos = 10) {
       botao.disabled = true;
-      let tempoRestante = segundos;
       const textoOriginal = botao.textContent;
+      let s = segundos;
+      botao.textContent = `Aguarde... (${s})`;
+
       const intervalo = setInterval(() => {
-        tempoRestante--;
-        if (tempoRestante <= 0) {
+        s--;
+        if (s > 0) {
+          botao.textContent = `Aguarde... (${s})`;
+        } else {
           clearInterval(intervalo);
           botao.disabled = false;
+          botao.textContent = textoOriginal;
         }
       }, 1000);
     }
 
-    // elementos
+    // ✅ Nova função: envio via fetch (substitui google.script.run)
+    async function enviarParaAppsScript(acao, dados) {
+      try {
+        const body = new URLSearchParams({ acao, ...dados });
+        const res = await fetch(SCRIPT_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body
+        });
+        const texto = await res.text();
+        const sucesso = texto.startsWith("✅");
+        showToast(texto.replace("✅ ", "").replace("❌ ", ""), sucesso);
+        return sucesso;
+      } catch (e) {
+        showToast("Erro de conexão", false);
+        return false;
+      }
+    }
+
+    // Elementos
     const form = document.getElementById('meuForm');
     const motorista = document.getElementById('motorista');
     const cliente = document.getElementById('cliente');
@@ -208,7 +270,7 @@
     const finalCancel = document.getElementById('finalCancel');
     const finalSave = document.getElementById('finalSave');
 
-    // helpers abrir/fechar overlays
+    // Helpers
     function showMsg(text) { msgText.innerHTML = text; msgOverlay.style.display = 'flex'; }
     function hideMsg(){ msgOverlay.style.display = 'none'; }
 
@@ -218,7 +280,7 @@
     function openFinalizar(){ finalizarOverlay.style.display = 'flex'; }
     function closeFinalizar(){ finalizarOverlay.style.display = 'none'; finalMotorista.value=''; finalCaixas.value=''; }
 
-    msgClose.onclick = () => { hideMsg(); aplicarCooldown(msgClose,10); };
+    msgClose.onclick = hideMsg;
 
     window.onclick = function(e){
       if (e.target === msgOverlay) hideMsg();
@@ -227,65 +289,67 @@
     };
 
     // ===== ENVIO PRINCIPAL =====
-    form.addEventListener('submit', function(ev){
+    form.addEventListener('submit', async function(ev){
       ev.preventDefault();
-      aplicarCooldown(btnEnviar,10);
+      aplicarCooldown(btnEnviar, 8);
 
       const m = motorista.value.trim();
       const c = cliente.value.trim();
       const s = saida.value;
       const eVal = entrada.value;
-      if (!m || !c || s === "" || eVal === "") { showMsg('Preencha todos os campos.'); return; }
+      if (!m || !c || s === "" || eVal === "") {
+        showToast("Preencha todos os campos", false);
+        return;
+      }
 
-      google.script.run.withSuccessHandler(function(res){
-        showMsg(res || 'Enviado com sucesso!');
-        form.reset();
-      }).withFailureHandler(function(err){
-        showMsg('Erro ao enviar os dados.');
-        console.error(err);
-      }).doPostWrapper(m, c, s, eVal);
+      const sucesso = await enviarParaAppsScript("registro", {
+        motorista: m,
+        cliente: c,
+        saida: s,
+        entrada: eVal
+      });
+
+      if (sucesso) form.reset();
     });
 
     // ===== INÍCIO =====
-    btnInicioFixed.addEventListener('click', function(){
-      openInicio();
-    });
+    btnInicioFixed.addEventListener('click', openInicio);
     inicioCancel.addEventListener('click', closeInicio);
 
-    inicioSave.addEventListener('click', function(){
-      aplicarCooldown(inicioSave,10);
+    inicioSave.addEventListener('click', async function(){
+      aplicarCooldown(inicioSave, 8);
       const m = inicioMotorista.value.trim();
       const caixas = inicioCaixas.value;
-      if (!m || caixas === "") { alert('Informe motorista e caixas no início.'); return; }
+      if (!m || caixas === "") {
+        showToast("Informe motorista e caixas", false);
+        return;
+      }
 
-      google.script.run.withSuccessHandler(function(res){
-        closeInicio();
-        showMsg(res || 'Início registrado!');
-      }).withFailureHandler(function(err){
-        showMsg('Erro ao registrar início.');
-        console.error(err);
-      }).registrarInicioCiclo(m, caixas);
+      await enviarParaAppsScript("inicio", {
+        motorista: m,
+        caixas: caixas
+      });
+      closeInicio();
     });
 
     // ===== FINALIZAR =====
-    btnFinalizarFixed.addEventListener('click', function(){
-      openFinalizar();
-    });
+    btnFinalizarFixed.addEventListener('click', openFinalizar);
     finalCancel.addEventListener('click', closeFinalizar);
 
-    finalSave.addEventListener('click', function(){
-      aplicarCooldown(finalSave,10);
+    finalSave.addEventListener('click', async function(){
+      aplicarCooldown(finalSave, 8);
       const m = finalMotorista.value.trim();
       const caixas = finalCaixas.value;
-      if (!m || caixas === "") { alert('Informe motorista e caixas no final.'); return; }
+      if (!m || caixas === "") {
+        showToast("Informe motorista e caixas", false);
+        return;
+      }
 
-      google.script.run.withSuccessHandler(function(res){
-        closeFinalizar();
-        showMsg(res || 'Ciclo finalizado!');
-      }).withFailureHandler(function(err){
-        showMsg('Erro ao finalizar ciclo. Verifique se existe um início aberto para o motorista.');
-        console.error(err);
-      }).finalizarCiclo(m, caixas);
+      await enviarParaAppsScript("final", {
+        motorista: m,
+        caixas: caixas
+      });
+      closeFinalizar();
     });
   </script>
 </body>
