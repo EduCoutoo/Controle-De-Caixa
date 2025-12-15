@@ -46,6 +46,21 @@
       cursor:pointer;
       font-weight:700;
     }
+    #btnHistoricoFixed {
+  position: fixed;
+  left: 16px;
+  bottom: 18px;
+  z-index: 9999;
+  background:#1f6feb;
+  color:#fff;
+  border:none;
+  padding:30px;
+  border-radius:8px;
+  box-shadow:0 6px 18px rgba(0,0,0,0.12);
+  cursor:pointer;
+  font-weight:700;
+}
+
 
     /* overlays/modal forms */
     .overlay {
@@ -139,6 +154,9 @@
   <!-- BOTÕES FIXOS -->
   <button id="btnFinalizarFixed" title="Finalizar ciclo">FINALIZAR</button>
   <button id="btnInicioFixed" title="Início do ciclo">INÍCIO</button>
+  <button id="btnHistoricoFixed" title="Histórico">HISTÓRICO<RICO>
+  <br>(NAO USAR AINDA)</button>
+
 
   <!-- MODAL INFORMAÇÃO -->
   <div id="msgOverlay" class="overlay" style="display:none; align-items:center;">
@@ -188,6 +206,31 @@
       </div>
     </div>
   </div>
+ 
+  <div id="historicoOverlay" class="overlay">
+  <div class="box">
+    <h3>Histórico de Envios</h3>
+
+    <label>Motorista</label>
+    <select id="historicoMotorista">
+      <option value="">-- escolha --</option>
+      <option>HILTON</option>
+      <option>MARCIO</option>
+      <option>PAULO</option>
+    </select>
+
+    <label style="margin-top:10px;">Selecione um envio</label>
+    <select id="historicoSelect"></select>
+
+    <pre id="historicoDetalhes"
+         style="margin-top:10px; max-height:200px; overflow:auto;"></pre>
+
+    <div class="actions">
+      <button id="historicoClose">Fechar</button>
+    </div>
+  </div>
+</div>
+
 
   <!-- Toast -->
   <div id="toast"></div>
@@ -352,5 +395,116 @@
       closeFinalizar();
     });
   </script>
+ <script>
+/* ========= HISTÓRICO LOCAL (COM MOTORISTA NO MODAL) ========= */
+
+const btnHistoricoFixed = document.getElementById('btnHistoricoFixed');
+const historicoOverlay = document.getElementById('historicoOverlay');
+const historicoMotorista = document.getElementById('historicoMotorista');
+const historicoSelect = document.getElementById('historicoSelect');
+const historicoDetalhes = document.getElementById('historicoDetalhes');
+const historicoClose = document.getElementById('historicoClose');
+
+function getHistoricoKeyPorMotorista(m) {
+  return m ? `historico_${m}` : null;
+}
+
+// Abre modal
+btnHistoricoFixed.onclick = () => {
+  historicoOverlay.style.display = 'flex';
+  historicoMotorista.value = '';
+  historicoSelect.innerHTML = ' ';
+  historicoDetalhes.textContent = '';
+};
+
+// Fecha modal
+historicoClose.onclick = () => historicoOverlay.style.display = 'none';
+
+// Quando escolhe motorista
+historicoMotorista.onchange = () => carregarHistoricoPorMotorista();
+
+function carregarHistoricoPorMotorista() {
+  const m = historicoMotorista.value;
+  historicoSelect.innerHTML = '';
+  historicoDetalhes.textContent = '';
+
+  if (!m) return;
+
+  verificarResetDiario(m);
+
+  const key = getHistoricoKeyPorMotorista(m);
+  const hist = JSON.parse(localStorage.getItem(key)) || [];
+
+  hist.forEach((h, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = `${h.dataHora} — ${h.cliente}`;
+    historicoSelect.appendChild(opt);
+  });
+
+  // seleciona automaticamente o último
+  if (hist.length > 0) {
+    historicoSelect.selectedIndex = hist.length - 1;
+    historicoSelect.onchange();
+  }
+}
+
+
+// Mostra detalhes
+historicoSelect.onchange = () => {
+  const m = historicoMotorista.value;
+  if (!m) return;
+
+  const key = getHistoricoKeyPorMotorista(m);
+  const hist = JSON.parse(localStorage.getItem(key)) || [];
+  const i = historicoSelect.value;
+  if (i === "") return;
+
+  historicoDetalhes.textContent =
+`Motorista: ${hist[i].motorista}
+Cliente: ${hist[i].cliente}
+Caixas Entregues: ${hist[i].saida}
+Caixas Recebidas: ${hist[i].entrada}
+Data/Hora: ${hist[i].dataHora}`;
+};
+
+// 🔗 Hook do envio (mantém o histórico salvando)
+const _envioOriginal = enviarParaAppsScript;
+enviarParaAppsScript = async function(acao, dados) {
+  const ok = await _envioOriginal(acao, dados);
+  if (ok && acao === "registro") {
+    verificarResetDiario(dados.motorista);
+    const key = getHistoricoKeyPorMotorista(dados.motorista);
+    const hist = JSON.parse(localStorage.getItem(key)) || [];
+    hist.push({
+      dataHora: new Date().toLocaleString(),
+      ...dados
+    });
+    localStorage.setItem(key, JSON.stringify(hist));
+  }
+  return ok;
+};
+function hojeLocal() {
+  return new Date().toLocaleDateString('pt-BR'); // ex: 09/12/2025
+}
+
+function verificarResetDiario(motorista) {
+  if (!motorista) return;
+
+  const dataKey = `historico_${motorista}_data`;
+  const histKey = `historico_${motorista}`;
+
+  const hoje = hojeLocal();
+  const salvo = localStorage.getItem(dataKey);
+
+  // primeira vez no dia OU dia mudou
+  if (salvo !== hoje) {
+    localStorage.removeItem(histKey);
+    localStorage.setItem(dataKey, hoje);
+  }
+}
+</script>
+
+
 </body>
 </html>
