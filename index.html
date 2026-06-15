@@ -271,23 +271,36 @@
       }, 1000);
     }
 
-    // ✅ Nova função: envio via fetch (substitui google.script.run)
-    async function enviarParaAppsScript(acao, dados) {
-      try {
-        const body = new URLSearchParams({ acao, ...dados });
-        const res = await fetch(SCRIPT_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body
-        });
-        const texto = await res.text();
-        const sucesso = texto.startsWith("✅");
-        showToast(texto.replace("✅ ", "").replace("❌ ", ""), sucesso);
-        return sucesso;
-      } catch (e) {
-        showToast("Erro de conexão", false);
+    async function enviarParaAppsScript(acao, dados, maxTentativas = 2) {
+  for (let tentativa = 1; tentativa <= maxTentativas; tentativa++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000); // timeout 15s
+
+    try {
+      const body = new URLSearchParams({ acao, ...dados });
+      const res = await fetch(SCRIPT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body,
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+      const texto = await res.text();
+      const sucesso = texto.startsWith("✅");
+      showToast(texto.replace(/^[✅❌]\s*/, ""), sucesso);
+      return sucesso;
+    } catch (e) {
+      clearTimeout(timer);
+      if (tentativa < maxTentativas) {
+        showToast(`Tentativa ${tentativa} falhou, tentando novamente…`, false);
+        await new Promise(r => setTimeout(r, 2500)); // espera antes de retentar
+      } else {
+        showToast("Falha na conexão. Verifique sua internet.", false);
         return false;
       }
+    }
+  }
+}
     }
 
     // Elementos
@@ -335,29 +348,27 @@
       if (e.target === finalizarOverlay) closeFinalizar();
     };
 
-    // ===== ENVIO PRINCIPAL =====
-    form.addEventListener('submit', async function(ev){
-      ev.preventDefault();
-      aplicarCooldown(btnEnviar, 8);
+    form.addEventListener('submit', async function(ev) {
+  ev.preventDefault();
 
-      const m = motorista.value.trim();
-      const c = cliente.value.trim();
-      const s = saida.value;
-      const eVal = entrada.value;
-      if (!m || !c || s === "" || eVal === "") {
-        showToast("Preencha todos os campos", false);
-        return;
-      }
+  const m = motorista.value.trim();
+  const c = cliente.value.trim();
+  const s = saida.value;
+  const eVal = entrada.value;
 
-      const sucesso = await enviarParaAppsScript("registro", {
-        motorista: m,
-        cliente: c,
-        saida: s,
-        entrada: eVal
-      });
+  if (!m || !c || s === "" || eVal === "") {
+    showToast("Preencha todos os campos", false);
+    return; // sai sem travar o botão
+  }
 
-      if (sucesso) form.reset();
-    });
+  aplicarCooldown(btnEnviar, 8); // ← agora só trava se passar na validação
+
+  const sucesso = await enviarParaAppsScript("registro", {
+    motorista: m, cliente: c, saida: s, entrada: eVal
+  });
+
+  if (sucesso) form.reset();
+});
 
     // ===== INÍCIO =====
     btnInicioFixed.addEventListener('click', openInicio);
